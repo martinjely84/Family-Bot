@@ -15,7 +15,7 @@ import re
 import logging
 import requests
 from flask import Flask, request, jsonify
-from anthropic import Anthropic
+import anthropic
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 import database as db
@@ -30,7 +30,13 @@ logger = logging.getLogger(__name__)
 # ── App & Clients ─────────────────────────────────────────────────────────────
 app = Flask(__name__)
 
-anthropic_client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
+ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+ANTHROPIC_HEADERS = {
+    "x-api-key": ANTHROPIC_API_KEY,
+    "anthropic-version": "2023-06-01",
+    "content-type": "application/json",
+}
 
 TELEGRAM_TOKEN  = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_API    = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
@@ -311,13 +317,19 @@ def handle_ai_chat(text: str, chat_id: str, from_user: str) -> str:
         history = history[-20:]
         conversation_history[chat_id] = history
     try:
-        response = anthropic_client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=800,
-            system=SYSTEM_PROMPT,
-            messages=history,
+        resp = requests.post(
+            ANTHROPIC_URL,
+            headers=ANTHROPIC_HEADERS,
+            json={
+                "model": "claude-sonnet-4-6",
+                "max_tokens": 800,
+                "system": SYSTEM_PROMPT,
+                "messages": history,
+            },
+            timeout=30,
         )
-        reply = response.content[0].text
+        resp.raise_for_status()
+        reply = resp.json()["content"][0]["text"]
         history.append({"role": "assistant", "content": reply})
         return reply
     except Exception as e:
