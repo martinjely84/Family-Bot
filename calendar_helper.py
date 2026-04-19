@@ -204,7 +204,8 @@ def add_event(
 
     try:
         client = _get_client()
-        cal    = _get_calendar(client)
+        cals   = _get_calendars(client)
+        cal    = cals[-1] if cals else None
         if cal is None:
             return False
 
