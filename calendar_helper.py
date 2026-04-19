@@ -41,25 +41,27 @@ def _get_client():
     )
 
 
-def _get_calendar(client: caldav.DAVClient):
-    """Find the shared calendar by name."""
+def _get_calendars(client: caldav.DAVClient):
+    """Return all calendars matching CALENDAR_NAME (there may be duplicates)."""
     principal = client.principal()
     calendars = principal.calendars()
+    matches = []
     for cal in calendars:
         try:
             cal_name = cal.get_properties([dav.DisplayName()])["{DAV:}displayname"]
             if cal_name.lower() == CALENDAR_NAME.lower():
-                return cal
+                matches.append(cal)
         except Exception:
             continue
-    # Fallback: return first non-task calendar
-    for cal in calendars:
-        try:
-            cal.get_properties([dav.DisplayName()])
-            return cal
-        except Exception:
-            continue
-    return None
+    if not matches:
+        # Fallback: all calendars
+        for cal in calendars:
+            try:
+                cal.get_properties([dav.DisplayName()])
+                matches.append(cal)
+            except Exception:
+                continue
+    return matches
 
 
 def _tz():
@@ -114,17 +116,22 @@ def get_events_for_day(target_date: date) -> list[str]:
         return []
 
     try:
-        client  = _get_client()
-        cal     = _get_calendar(client)
-        if cal is None:
+        client = _get_client()
+        cals   = _get_calendars(client)
+        if not cals:
             return [f"(Calendar '{CALENDAR_NAME}' not found)"]
 
-        tz      = _tz()
-        start   = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=tz)
-        end     = start + timedelta(days=1)
+        tz    = _tz()
+        start = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=tz)
+        end   = start + timedelta(days=1)
 
-        events  = cal.date_search(start=start, end=end, expand=True)
-        return [_fmt_event(e) for e in events] if events else []
+        results = []
+        for cal in cals:
+            try:
+                results.extend(cal.date_search(start=start, end=end, expand=True))
+            except Exception:
+                continue
+        return [_fmt_event(e) for e in results] if results else []
 
     except Exception as e:
         logger.error(f"iCloud CalDAV error: {e}")
@@ -140,16 +147,21 @@ def get_events_for_range(start_date: date, end_date: date) -> dict[str, list[str
         return {}
 
     try:
-        client  = _get_client()
-        cal     = _get_calendar(client)
-        if cal is None:
+        client = _get_client()
+        cals   = _get_calendars(client)
+        if not cals:
             return {}
 
-        tz      = _tz()
-        start   = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=tz)
-        end     = datetime.combine(end_date, datetime.max.time()).replace(tzinfo=tz)
+        tz    = _tz()
+        start = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=tz)
+        end   = datetime.combine(end_date, datetime.max.time()).replace(tzinfo=tz)
 
-        events  = cal.date_search(start=start, end=end, expand=True)
+        events = []
+        for cal in cals:
+            try:
+                events.extend(cal.date_search(start=start, end=end, expand=True))
+            except Exception:
+                continue
 
         grouped: dict[str, list[str]] = {}
         for event in events:
