@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 ICLOUD_USERNAME      = os.environ.get("ICLOUD_USERNAME", "")        # your Apple ID email
 ICLOUD_APP_PASSWORD  = os.environ.get("ICLOUD_APP_PASSWORD", "")    # app-specific password
 CALENDAR_NAME        = os.environ.get("ICLOUD_CALENDAR_NAME", "Family")  # shared cal name
-TIMEZONE             = os.environ.get("TIMEZONE", "Europe/London")   # your local timezone
+TIMEZONE             = os.environ.get("TIMEZONE", "America/Chicago").strip().lstrip("=")
 
 ICLOUD_CALDAV_URL = "https://caldav.icloud.com"
 
@@ -63,7 +63,10 @@ def _get_calendar(client: caldav.DAVClient):
 
 
 def _tz():
-    return ZoneInfo(TIMEZONE)
+    try:
+        return ZoneInfo(TIMEZONE)
+    except Exception:
+        return ZoneInfo("UTC")
 
 
 def _fmt_event(event) -> str:
