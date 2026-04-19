@@ -312,7 +312,7 @@ def handle_ai_chat(text: str, chat_id: str, from_user: str) -> str:
         conversation_history[chat_id] = history
     try:
         response = anthropic_client.messages.create(
-            model="claude-opus-4-6",
+            model="claude-sonnet-4-6",
             max_tokens=800,
             system=SYSTEM_PROMPT,
             messages=history,
