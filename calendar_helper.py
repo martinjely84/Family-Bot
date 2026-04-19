@@ -121,14 +121,26 @@ def get_events_for_day(target_date: date) -> list[str]:
         if not cals:
             return [f"(Calendar '{CALENDAR_NAME}' not found)"]
 
-        tz    = _tz()
-        start = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=tz)
-        end   = start + timedelta(days=1)
-
         results = []
         for cal in cals:
             try:
-                results.extend(cal.date_search(start=start, end=end, expand=True))
+                for event in cal.events():
+                    try:
+                        comp = icalendar.Calendar.from_ical(event.data)
+                        for component in comp.walk():
+                            if component.name == "VEVENT":
+                                dtstart = component.get("DTSTART")
+                                if dtstart is None:
+                                    continue
+                                ev_start = dtstart.dt
+                                if isinstance(ev_start, datetime):
+                                    ev_date = ev_start.date()
+                                else:
+                                    ev_date = ev_start
+                                if ev_date == target_date:
+                                    results.append(event)
+                    except Exception:
+                        continue
             except Exception:
                 continue
         return [_fmt_event(e) for e in results] if results else []
@@ -159,7 +171,7 @@ def get_events_for_range(start_date: date, end_date: date) -> dict[str, list[str
         events = []
         for cal in cals:
             try:
-                events.extend(cal.date_search(start=start, end=end, expand=True))
+                events.extend(cal.events())
             except Exception:
                 continue
 
