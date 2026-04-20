@@ -19,6 +19,7 @@ import anthropic
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 import database as db
+from duckduckgo_search import DDGS
 from datetime import datetime, date, timedelta
 import dateparser
 import calendar_helper as cal
@@ -116,6 +117,9 @@ def process_message(text: str, chat_id: str, from_user: str) -> str:
 
     if lower.startswith("reminders"):
         return list_reminders(chat_id)
+
+    if re.match(r"^(search|google|find|look up)\b", lower):
+        return handle_search(text)
 
     if re.match(r"^(cal|calendar)\b", lower):
         return handle_calendar(text, chat_id)
@@ -302,6 +306,27 @@ def _format_range(grouped: dict, heading: str) -> str:
     return "\n".join(lines).strip()
 
 
+# ── Web Search Handler ────────────────────────────────────────────────────────
+def handle_search(text: str) -> str:
+    query = re.sub(r"^(search|google|find|look up)\s+", "", text, flags=re.IGNORECASE).strip()
+    if not query:
+        return "What would you like me to search for?"
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=4))
+        if not results:
+            return f"No results found for: _{query}_"
+        lines = [f"🔍 *Search results for: {query}*\n"]
+        for r in results:
+            lines.append(f"*{r['title']}*")
+            lines.append(r['body'])
+            lines.append(f"_{r['href']}_\n")
+        return "\n".join(lines)
+    except Exception as e:
+        logger.error(f"Search error: {e}")
+        return "Sorry, search isn't working right now. Try again shortly."
+
+
 # ── AI Chat Handler ───────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are a warm, practical family assistant for Martin and his wife, in their shared Telegram group.
 You help with family organisation, life and relationship advice, parenting tips, household management, and general questions.
@@ -343,6 +368,9 @@ def get_help_text() -> str:
         "👋 *Family Bot — Quick Guide*\n\n"
         "*💬 Chat & Advice*\n"
         "Just type anything!\n\n"
+        "*🔍 Web Search*\n"
+        "`search Braintopia Houston reviews`\n"
+        "`google autism friendly restaurants near me`\n\n"
         "*📅 Apple Calendar*\n"
         "`cal today` / `cal tomorrow` / `cal week`\n"
         "`cal add dentist on Friday at 3pm`\n"
